@@ -1,18 +1,113 @@
-
-# 💻 Tech Stack:
-![C#](https://img.shields.io/badge/c%23-%23239120.svg?style=for-the-badge&logo=csharp&logoColor=white) ![GraphQL](https://img.shields.io/badge/-GraphQL-E10098?style=for-the-badge&logo=graphql&logoColor=white) ![HTML5](https://img.shields.io/badge/html5-%23E34F26.svg?style=for-the-badge&logo=html5&logoColor=white) ![CSS3](https://img.shields.io/badge/css3-%231572B6.svg?style=for-the-badge&logo=css3&logoColor=white) ![JavaScript](https://img.shields.io/badge/javascript-%23323330.svg?style=for-the-badge&logo=javascript&logoColor=%23F7DF1E) ![Lua](https://img.shields.io/badge/lua-%232C2D72.svg?style=for-the-badge&logo=lua&logoColor=white) ![Markdown](https://img.shields.io/badge/markdown-%23000000.svg?style=for-the-badge&logo=markdown&logoColor=white) ![PowerShell](https://img.shields.io/badge/PowerShell-%235391FE.svg?style=for-the-badge&logo=powershell&logoColor=white) ![TypeScript](https://img.shields.io/badge/typescript-%23007ACC.svg?style=for-the-badge&logo=typescript&logoColor=white) ![Windows Terminal](https://img.shields.io/badge/Windows%20Terminal-%234D4D4D.svg?style=for-the-badge&logo=windows-terminal&logoColor=white) ![AWS](https://img.shields.io/badge/AWS-%23FF9900.svg?style=for-the-badge&logo=amazon-aws&logoColor=white) ![Azure](https://img.shields.io/badge/azure-%230072C6.svg?style=for-the-badge&logo=microsoftazure&logoColor=white) ![Google Cloud](https://img.shields.io/badge/GoogleCloud-%234285F4.svg?style=for-the-badge&logo=google-cloud&logoColor=white) ![Vercel](https://img.shields.io/badge/vercel-%23000000.svg?style=for-the-badge&logo=vercel&logoColor=white) ![.Net](https://img.shields.io/badge/.NET-5C2D91?style=for-the-badge&logo=.net&logoColor=white) ![Bootstrap](https://img.shields.io/badge/bootstrap-%238511FA.svg?style=for-the-badge&logo=bootstrap&logoColor=white) ![Gulp](https://img.shields.io/badge/GULP-%23CF4647.svg?style=for-the-badge&logo=gulp&logoColor=white) ![jQuery](https://img.shields.io/badge/jquery-%230769AD.svg?style=for-the-badge&logo=jquery&logoColor=white) ![JWT](https://img.shields.io/badge/JWT-black?style=for-the-badge&logo=JSON%20web%20tokens) ![NPM](https://img.shields.io/badge/NPM-%23CB3837.svg?style=for-the-badge&logo=npm&logoColor=white) ![NodeJS](https://img.shields.io/badge/node.js-6DA55F?style=for-the-badge&logo=node.js&logoColor=white) ![SASS](https://img.shields.io/badge/SASS-hotpink.svg?style=for-the-badge&logo=SASS&logoColor=white) ![TailwindCSS](https://img.shields.io/badge/tailwindcss-%2338B2AC.svg?style=for-the-badge&logo=tailwind-css&logoColor=white) ![Webpack](https://img.shields.io/badge/webpack-%238DD6F9.svg?style=for-the-badge&logo=webpack&logoColor=black) ![WordPress](https://img.shields.io/badge/WordPress-%23117AC9.svg?style=for-the-badge&logo=WordPress&logoColor=white) ![MicrosoftSQLServer](https://img.shields.io/badge/Microsoft%20SQL%20Server-CC2927?style=for-the-badge&logo=microsoft%20sql%20server&logoColor=white) ![MongoDB](https://img.shields.io/badge/MongoDB-%234ea94b.svg?style=for-the-badge&logo=mongodb&logoColor=white) ![MySQL](https://img.shields.io/badge/mysql-4479A1.svg?style=for-the-badge&logo=mysql&logoColor=white) ![Redis](https://img.shields.io/badge/redis-%23DD0031.svg?style=for-the-badge&logo=redis&logoColor=white) ![GitLab CI](https://img.shields.io/badge/gitlab%20CI-%23181717.svg?style=for-the-badge&logo=gitlab&logoColor=white) ![GitHub Actions](https://img.shields.io/badge/github%20actions-%232671E5.svg?style=for-the-badge&logo=githubactions&logoColor=white) ![Apache Subversion](https://img.shields.io/badge/subversion-%23809CC9.svg?style=for-the-badge&logo=subversion&logoColor=white) ![Bitbucket](https://img.shields.io/badge/bitbucket-%230047B3.svg?style=for-the-badge&logo=bitbucket&logoColor=white) ![Git](https://img.shields.io/badge/git-%23F05033.svg?style=for-the-badge&logo=git&logoColor=white) ![GitHub](https://img.shields.io/badge/github-%23121011.svg?style=for-the-badge&logo=github&logoColor=white) ![GitLab](https://img.shields.io/badge/gitlab-%23181717.svg?style=for-the-badge&logo=gitlab&logoColor=white) ![Selenium](https://img.shields.io/badge/-selenium-%43B02A?style=for-the-badge&logo=selenium&logoColor=white) ![ESLint](https://img.shields.io/badge/ESLint-4B3263?style=for-the-badge&logo=eslint&logoColor=white) ![Docker](https://img.shields.io/badge/docker-%230db7ed.svg?style=for-the-badge&logo=docker&logoColor=white) ![Kubernetes](https://img.shields.io/badge/kubernetes-%23326ce5.svg?style=for-the-badge&logo=kubernetes&logoColor=white) ![Jira](https://img.shields.io/badge/jira-%230A0FFF.svg?style=for-the-badge&logo=jira&logoColor=white) ![Postman](https://img.shields.io/badge/Postman-FF6C37?style=for-the-badge&logo=postman&logoColor=white) ![Prettier](https://img.shields.io/badge/prettier-%23F7B93E.svg?style=for-the-badge&logo=prettier&logoColor=black) ![SonarQube](https://img.shields.io/badge/SonarQube-black?style=for-the-badge&logo=sonarqube&logoColor=4E9BCD) ![Swagger](https://img.shields.io/badge/-Swagger-%23Clojure?style=for-the-badge&logo=swagger&logoColor=white) ![Tampermonkey](https://img.shields.io/badge/tampermonkey-%2300485B.svg?style=for-the-badge&logo=tampermonkey&logoColor=white) ![TOR](https://img.shields.io/badge/tor-%237E4798.svg?style=for-the-badge&logo=tor-project&logoColor=white) ![Terraform](https://img.shields.io/badge/terraform-%235835CC.svg?style=for-the-badge&logo=terraform&logoColor=white)
-
 <!--
-**prabhatsharma07/prabhatsharma07** is a ✨ _special_ ✨ repository because its `README.md` (this file) appears on your GitHub profile.
+  Everything visible here is rendered from source in tools/ and committed to
+  assets/. To change the art, edit the generator and run `node tools/build-all.js`.
 
-Here are some ideas to get you started:
-
-- 🔭 I’m currently working on ...
-- 🌱 I’m currently learning ...
-- 👯 I’m looking to collaborate on ...
-- 🤔 I’m looking for help with ...
-- 💬 Ask me about ...
-- 📫 How to reach me: ...
-- 😄 Pronouns: ...
-- ⚡ Fun fact: ...
+  Adding your own links: drop them into the "Elsewhere" line near the bottom.
 -->
+
+<div align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/prabhatsharma07/prabhatsharma07/main/assets/hero-dark.svg">
+    <source media="(prefers-color-scheme: light)" srcset="https://raw.githubusercontent.com/prabhatsharma07/prabhatsharma07/main/assets/hero-light.svg">
+    <img alt="Prabhat Sharma — full-stack developer" src="https://raw.githubusercontent.com/prabhatsharma07/prabhatsharma07/main/assets/hero-dark.svg" width="100%">
+  </picture>
+</div>
+
+<div align="center">
+
+I build software end to end — the interface people touch, the services behind it,
+and the infrastructure it all runs on.
+
+</div>
+
+<br>
+
+### What I work on
+
+- **Web platforms** — TypeScript and C#/.NET from the browser to the database: component UIs, typed APIs, GraphQL and REST, auth and sessions.
+- **Cloud & infrastructure** — AWS, Azure and Google Cloud; containers orchestrated with Kubernetes, environments declared in Terraform.
+- **DevOps & quality** — GitHub Actions and GitLab CI pipelines, linting and static-analysis gates, automated browser testing.
+
+<br>
+
+<div align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/prabhatsharma07/prabhatsharma07/main/assets/stack-dark.svg">
+    <source media="(prefers-color-scheme: light)" srcset="https://raw.githubusercontent.com/prabhatsharma07/prabhatsharma07/main/assets/stack-light.svg">
+    <img alt="The stack: languages, frontend, backend, data, cloud, devops, version control and quality tooling" src="https://raw.githubusercontent.com/prabhatsharma07/prabhatsharma07/main/assets/stack-dark.svg" width="100%">
+  </picture>
+</div>
+
+<br>
+
+<div align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/prabhatsharma07/prabhatsharma07/main/assets/activity-dark.svg">
+    <source media="(prefers-color-scheme: light)" srcset="https://raw.githubusercontent.com/prabhatsharma07/prabhatsharma07/main/assets/activity-light.svg">
+    <img alt="Contribution activity: streaks, active days and a twelve-month contribution heatmap" src="https://raw.githubusercontent.com/prabhatsharma07/prabhatsharma07/main/assets/activity-dark.svg" width="100%">
+  </picture>
+</div>
+
+<br>
+
+### Under the hood
+
+Every image on this page is generated from source in this repository. No badge
+services, no third-party stat widgets — nothing that can rate-limit, restyle
+itself, or quietly go offline.
+
+```
+tools/
+├─ lib/theme.js        design tokens, one set per theme
+├─ lib/svg.js          dependency-free SVG writer + deterministic PRNG
+├─ lib/scene.js        aurora field, blueprint grid, starfield, typewriter
+├─ lib/github.js       GraphQL → contribution model (streaks, totals)
+├─ build-hero.js       the banner
+├─ build-stack.js      the stack board
+├─ build-activity.js   the contribution dashboard
+└─ build-all.js        renders every asset into assets/
+```
+
+Each asset is rendered twice — once per theme — and swapped by `<picture>` on
+`prefers-color-scheme`, so the page follows your GitHub appearance setting. The
+animation is plain SMIL and CSS inside the SVG: no JavaScript, no external
+fonts, no network calls. Renders are deterministic, so rebuilding without new
+data produces byte-identical files and commits nothing.
+
+A scheduled GitHub Action re-renders the activity panel every day against the
+GitHub GraphQL API and commits the result back.
+
+<details>
+<summary>Running it yourself</summary>
+
+<br>
+
+```bash
+node tools/build-all.js   # writes assets/*.svg
+```
+
+With no token the activity panel renders an empty state rather than inventing
+numbers. In Actions it picks up `GITHUB_TOKEN` automatically, which covers
+**public** contributions.
+
+To include private contributions:
+
+1. Enable **Settings → Public profile → Contributions & Activity → Include private contributions on my profile**.
+2. Add a repository secret named `GH_PAT` holding a token with `read:user`.
+
+Then run the **profile art** workflow, or wait for the daily schedule.
+
+</details>
+
+<br>
+
+---
+
+<div align="center">
+
+**Elsewhere** · [github.com/prabhatsharma07](https://github.com/prabhatsharma07)
+
+<sub>Every pixel above is committed to this repo —
+<a href="https://github.com/prabhatsharma07/prabhatsharma07/tree/main/tools">read the source</a>.</sub>
+
+</div>
