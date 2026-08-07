@@ -90,12 +90,34 @@ With no token the activity panel renders an empty state rather than inventing
 numbers. In Actions it picks up `GITHUB_TOKEN` automatically, which covers
 **public** contributions.
 
-To include private contributions:
+If most of your work lives in private repositories, the public calendar will
+look empty and the panel will say so. Two steps fix it:
 
-1. Enable **Settings → Public profile → Contributions & Activity → Include private contributions on my profile**.
-2. Add a repository secret named `GH_PAT` holding a token with `read:user`.
+1. Turn on **Settings → Public profile → Contributions & Activity → Include private contributions on my profile**. This is the one that matters — without it, no token will surface private work.
+2. Optionally add a repository secret named `GH_PAT` holding a personal access token, so the lifetime totals count private activity too.
 
 Then run the **profile art** workflow, or wait for the daily schedule.
+
+</details>
+
+<details>
+<summary>Notes on what actually renders on GitHub</summary>
+
+<br>
+
+- All motion is **SMIL**, not CSS keyframes. Firefox has a history of not
+  animating CSS inside an SVG loaded as an `<img>`, which is exactly how GitHub
+  serves these; SMIL animates everywhere.
+- No `<script>`, no external fonts, no external images. GitHub serves README
+  SVGs under `default-src 'none'`, so anything fetched over the network
+  silently fails — type uses system font stacks and the layout never depends on
+  exact glyph metrics.
+- Every root `<svg>` carries `width`, `height` *and* `viewBox`; without
+  intrinsic sizing an SVG in an `<img>` collapses to 300×150.
+- `<source>` takes `srcset`, never `src` — the quiet way theme switching breaks.
+- `prefers-color-scheme` follows the **browser/OS** setting, not GitHub's theme
+  dropdown, so both variants are self-contained cards that hold up on either
+  background.
 
 </details>
 

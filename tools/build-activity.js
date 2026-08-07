@@ -228,15 +228,29 @@ function render(t, data, now) {
   );
 
   const synced = (isLive ? data.generatedAt : now.toISOString()).slice(0, 10);
-  const subtitle = isLive
-    ? `last 12 months  ·  synced ${synced}`
-    : 'last 12 months  ·  waiting for first sync';
+
+  // A public-only calendar on an account that works mostly in private repos
+  // reads as "this person does nothing". Detect it and say what is actually
+  // going on rather than presenting a near-empty year as the whole picture.
+  const publicOnly = isLive && !data.privateShared;
+  const looksUnderstated = publicOnly && data.total < 25;
+
+  const scope = !isLive
+    ? 'waiting for first sync'
+    : data.privateShared
+      ? 'public + private contributions'
+      : 'public contributions only';
+  const subtitle = `last 12 months  ·  ${scope}${isLive ? `  ·  synced ${synced}` : ''}`;
 
   // Status pill, right-aligned.
-  const pillLabel = isLive ? `SYNCED ${synced}` : 'AWAITING SYNC';
+  const pillLabel = !isLive
+    ? 'AWAITING SYNC'
+    : looksUnderstated
+      ? 'PRIVATE WORK HIDDEN'
+      : `SYNCED ${synced}`;
   const pillW = 30 + monoWidthLS(pillLabel, 12, 0.14) + 14;
   const pillX = RIGHT - pillW;
-  const pillAccent = isLive ? t.green : t.amber;
+  const pillAccent = isLive && !looksUnderstated ? t.green : t.amber;
   const pill =
     tag('path', {
       d: roundedRect(pillX, 40, pillW, 28, 14),
@@ -383,7 +397,8 @@ function render(t, data, now) {
   });
 
   const lt = isLive ? data.lifetime : null;
-  const hasLifetime = lt && lt.commits + lt.pullRequests + lt.reviews + lt.issues > 0;
+  const hasLifetime =
+    lt && !looksUnderstated && lt.commits + lt.pullRequests + lt.reviews + lt.issues > 0;
   if (hasLifetime) {
     const parts = [
       ['commits', lt.commits],
@@ -427,9 +442,11 @@ function render(t, data, now) {
     });
   } else {
     footer += text(
-      isLive
-        ? 'private contributions are hidden — enable them in Settings › Public profile to count them here'
-        : 'run the "profile art" workflow to populate this panel with live data',
+      !isLive
+        ? 'run the "profile art" workflow to populate this panel with live data'
+        : looksUnderstated
+          ? 'this counts public repositories only — turn on Settings › Public profile › Include private contributions'
+          : 'no contributions recorded in this window',
       {
         x: PAD,
         y: H - 26,

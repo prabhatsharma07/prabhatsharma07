@@ -55,9 +55,10 @@ function text(str, o = {}) {
   return tag('text', o, esc(str));
 }
 
-// A <style> block. GitHub serves README SVGs as images, so CSS inside the file
-// is scoped to the image and cannot leak into the page.
-const style = (css) => `<style>${css}</style>`;
+// Deliberately no <style>/CSS-keyframes helper. Firefox has a history of not
+// ticking CSS animations for an SVG loaded as an <img> — which is exactly how
+// GitHub serves these — while SMIL animates reliably in every engine. All
+// motion here is SMIL, and it should stay that way.
 
 function svgDoc({ width, height, children, defs = '', title, desc }) {
   return (
@@ -127,7 +128,6 @@ module.exports = {
   tag,
   g,
   text,
-  style,
   svgDoc,
   roundedRect,
   smoothPath,
