@@ -1,135 +1,199 @@
-// Minimal SVG authoring helpers. No dependencies on purpose: the refresh
-// workflow should never need an `npm install` step.
+const ESCAPES = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' };
 
-const esc = (s) =>
-  String(s)
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;');
+const esc = (value) => String(value).replace(/[&<>"]/g, (char) => ESCAPES[char]);
+const num = (value) => (typeof value === 'number' ? +value.toFixed(2) : value);
+const seconds = (value) => `${num(value)}s`;
 
-// Deterministic PRNG (mulberry32). Every generated frame must be byte-identical
-// for the same inputs, otherwise the refresh workflow commits noise every run.
-function rng(seed) {
-  let a = seed >>> 0;
-  return function next() {
-    a |= 0;
-    a = (a + 0x6d2b79f5) | 0;
-    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+function el(name, props = {}, children = '') {
+  const attrs = Object.entries(props)
+    .filter(([, value]) => value !== undefined && value !== null && value !== false)
+    .map(([key, value]) => ` ${key}="${esc(num(value))}"`)
+    .join('');
+  return children ? `<${name}${attrs}>${children}</${name}>` : `<${name}${attrs}/>`;
+}
+
+const rect = (props, children) => el('rect', props, children);
+const circle = (props, children) => el('circle', props, children);
+const ellipse = (props, children) => el('ellipse', props, children);
+const path = (props, children) => el('path', props, children);
+const polygon = (props) => el('polygon', props);
+const group = (props, children) => el('g', props, children);
+
+const MONO = "ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace";
+const SANS = "-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif";
+const CHAR_WIDTH = 0.6;
+
+const textWidth = (str, size, tracking = 0) => str.length * size * (CHAR_WIDTH + tracking);
+
+const label = (str, { x, y, size = 12, fill, font = MONO, weight, tracking, anchor, opacity }) =>
+  el(
+    'text',
+    {
+      x,
+      y,
+      fill,
+      opacity,
+      'font-family': font,
+      'font-size': size,
+      'font-weight': weight,
+      'letter-spacing': tracking ? `${tracking}em` : undefined,
+      'text-anchor': anchor,
+    },
+    esc(str)
+  );
+
+function roundRect(x, y, w, h, r) {
+  const [tl, tr, br, bl] = Array.isArray(r) ? r : [r, r, r, r];
+  return [
+    `M${num(x + tl)},${num(y)}`,
+    `H${num(x + w - tr)}`,
+    `A${num(tr)},${num(tr)} 0 0 1 ${num(x + w)},${num(y + tr)}`,
+    `V${num(y + h - br)}`,
+    `A${num(br)},${num(br)} 0 0 1 ${num(x + w - br)},${num(y + h)}`,
+    `H${num(x + bl)}`,
+    `A${num(bl)},${num(bl)} 0 0 1 ${num(x)},${num(y + h - bl)}`,
+    `V${num(y + tl)}`,
+    `A${num(tl)},${num(tl)} 0 0 1 ${num(x + tl)},${num(y)}`,
+    'Z',
+  ].join(' ');
+}
+
+const card = ({ x, y, w, h, r = 12, fill, fillOpacity, stroke, strokeOpacity }) =>
+  (fill ? path({ d: roundRect(x, y, w, h, r), fill, 'fill-opacity': fillOpacity }) : '') +
+  (stroke
+    ? path({
+        d: roundRect(x + 0.5, y + 0.5, w - 1, h - 1, r - 0.5),
+        stroke,
+        'stroke-opacity': strokeOpacity,
+        'stroke-width': 1,
+        fill: 'none',
+      })
+    : '');
+
+const EASE_OUT = '.16 1 .3 1';
+const EASE_IN_OUT = '.42 0 .58 1';
+
+const animate = (attribute, props) => el('animate', { attributeName: attribute, ...props });
+
+const animateTransform = (type, props) =>
+  el('animateTransform', { attributeName: 'transform', attributeType: 'XML', type, ...props });
+
+const fadeIn = ({ begin = 0, dur = 0.5, to = 1, ease }) =>
+  animate('opacity', {
+    from: 0,
+    to,
+    dur: seconds(dur),
+    begin: seconds(begin),
+    fill: 'freeze',
+    calcMode: ease ? 'spline' : undefined,
+    keyTimes: ease ? '0;1' : undefined,
+    keySplines: ease,
+  });
+
+const rise = ({ begin = 0, dur = 0.6, from = 7 }) =>
+  animateTransform('translate', {
+    from: `0 ${num(from)}`,
+    to: '0 0',
+    dur: seconds(dur),
+    begin: seconds(begin),
+    fill: 'freeze',
+    calcMode: 'spline',
+    keyTimes: '0;1',
+    keySplines: EASE_OUT,
+  });
+
+const spin = ({ cx, cy, dur, dir = 1 }) =>
+  animateTransform('rotate', {
+    from: `0 ${num(cx)} ${num(cy)}`,
+    to: `${360 * dir} ${num(cx)} ${num(cy)}`,
+    dur: seconds(dur),
+    repeatCount: 'indefinite',
+  });
+
+const loop = (attribute, values, { dur, begin = 0, keyTimes, ease, mode }) =>
+  animate(attribute, {
+    values: values.map(num).join(';'),
+    keyTimes: keyTimes && keyTimes.map(num).join(';'),
+    dur: seconds(dur),
+    begin: seconds(begin),
+    repeatCount: 'indefinite',
+    calcMode: mode || (ease ? 'spline' : undefined),
+    keySplines: ease ? Array(values.length - 1).fill(ease).join(';') : undefined,
+  });
+
+const loopTransform = (type, values, { dur, begin = 0, keyTimes, ease }) =>
+  animateTransform(type, {
+    values: values.join(';'),
+    keyTimes: keyTimes && keyTimes.map(num).join(';'),
+    dur: seconds(dur),
+    begin: seconds(begin),
+    repeatCount: 'indefinite',
+    calcMode: ease ? 'spline' : undefined,
+    keySplines: ease ? Array(values.length - 1).fill(ease).join(';') : undefined,
+  });
+
+function increasing(times) {
+  return times.reduce((out, time) => {
+    const previous = out[out.length - 1];
+    out.push(previous === undefined ? time : Math.max(time, previous + 0.0001));
+    return out;
+  }, []);
+}
+
+function randomizer(seed) {
+  let state = seed >>> 0;
+  return () => {
+    state = (state + 0x6d2b79f5) | 0;
+    let t = Math.imul(state ^ (state >>> 15), 1 | state);
     t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
     return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
   };
 }
 
-// Round to 2dp and drop trailing zeros, so the output diffs stay readable.
-const n = (v) => {
-  const r = Math.round(v * 100) / 100;
-  return Object.is(r, -0) ? '0' : String(r);
-};
-
-// Monospace advance width is a reliable 0.6em across the whole system stack,
-// which is what makes chip auto-sizing safe without measuring real fonts.
-const MONO_ADVANCE = 0.6;
-const monoWidth = (text, size) => text.length * size * MONO_ADVANCE;
-
-// letter-spacing adds its em value to every advance, including the last glyph.
-// Needed whenever runs of text are laid out end to end by hand.
-const monoWidthLS = (text, size, letterSpacingEm = 0) =>
-  text.length * size * (MONO_ADVANCE + letterSpacingEm);
-
-function attrs(o) {
-  return Object.entries(o)
-    .filter(([, v]) => v !== undefined && v !== null && v !== false)
-    .map(([k, v]) => `${k}="${esc(v)}"`)
-    .join(' ');
-}
-
-const tag = (name, o = {}, children = '') =>
-  children === '' || children == null
-    ? `<${name} ${attrs(o)}/>`
-    : `<${name} ${attrs(o)}>${children}</${name}>`;
-
-const g = (o, children) => tag('g', o, children);
-
-function text(str, o = {}) {
-  return tag('text', o, esc(str));
-}
-
-// Deliberately no <style>/CSS-keyframes helper. Firefox has a history of not
-// ticking CSS animations for an SVG loaded as an <img> — which is exactly how
-// GitHub serves these — while SMIL animates reliably in every engine. All
-// motion here is SMIL, and it should stay that way.
-
-function svgDoc({ width, height, children, defs = '', title, desc }) {
-  return (
-    `<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" ` +
-    `viewBox="0 0 ${width} ${height}" width="${width}" height="${height}" ` +
-    `role="img" fill="none">` +
-    (title ? `<title>${esc(title)}</title>` : '') +
-    (desc ? `<desc>${esc(desc)}</desc>` : '') +
-    (defs ? `<defs>${defs}</defs>` : '') +
-    children +
-    `</svg>\n`
-  );
-}
-
-// Rounded-rect path with independent corner radii, for panels that need to
-// merge into a neighbouring edge.
-function roundedRect(x, y, w, h, r) {
-  const [tl, tr, br, bl] = Array.isArray(r) ? r : [r, r, r, r];
-  return (
-    `M${n(x + tl)},${n(y)} H${n(x + w - tr)} A${n(tr)},${n(tr)} 0 0 1 ${n(x + w)},${n(y + tr)} ` +
-    `V${n(y + h - br)} A${n(br)},${n(br)} 0 0 1 ${n(x + w - br)},${n(y + h)} ` +
-    `H${n(x + bl)} A${n(bl)},${n(bl)} 0 0 1 ${n(x)},${n(y + h - bl)} ` +
-    `V${n(y + tl)} A${n(tl)},${n(tl)} 0 0 1 ${n(x + tl)},${n(y)} Z`
-  );
-}
-
-// Smooth open path through points (Catmull-Rom converted to cubic beziers).
-function smoothPath(points, tension = 0.5) {
-  if (points.length < 2) return '';
-  let d = `M${n(points[0][0])},${n(points[0][1])}`;
-  for (let i = 0; i < points.length - 1; i++) {
-    const p0 = points[i - 1] || points[i];
-    const p1 = points[i];
-    const p2 = points[i + 1];
-    const p3 = points[i + 2] || p2;
-    const c1x = p1[0] + ((p2[0] - p0[0]) / 6) * tension * 2;
-    const c1y = p1[1] + ((p2[1] - p0[1]) / 6) * tension * 2;
-    const c2x = p2[0] - ((p3[0] - p1[0]) / 6) * tension * 2;
-    const c2y = p2[1] - ((p3[1] - p1[1]) / 6) * tension * 2;
-    d += ` C${n(c1x)},${n(c1y)} ${n(c2x)},${n(c2y)} ${n(p2[0])},${n(p2[1])}`;
-  }
-  return d;
-}
-
-// Orthogonal "circuit trace" from a to b: out, along, in — with mitred corners.
-function tracePath(ax, ay, bx, by, midX, radius = 8) {
-  const dirY = by > ay ? 1 : -1;
-  const r = Math.min(radius, Math.abs(by - ay) / 2, Math.abs(midX - ax), Math.abs(bx - midX));
-  if (r <= 0.5 || Math.abs(by - ay) < 1) return `M${n(ax)},${n(ay)} H${n(bx)}`;
-  return (
-    `M${n(ax)},${n(ay)} H${n(midX - r)} ` +
-    `Q${n(midX)},${n(ay)} ${n(midX)},${n(ay + r * dirY)} ` +
-    `V${n(by - r * dirY)} ` +
-    `Q${n(midX)},${n(by)} ${n(midX + r)},${n(by)} ` +
-    `H${n(bx)}`
-  );
-}
+const svgDocument = ({ width, height, title, desc, defs = '', body }) =>
+  el(
+    'svg',
+    {
+      xmlns: 'http://www.w3.org/2000/svg',
+      viewBox: `0 0 ${width} ${height}`,
+      width,
+      height,
+      role: 'img',
+      fill: 'none',
+    },
+    (title ? el('title', {}, esc(title)) : '') +
+      (desc ? el('desc', {}, esc(desc)) : '') +
+      (defs ? el('defs', {}, defs) : '') +
+      body
+  ) + '\n';
 
 module.exports = {
   esc,
-  rng,
-  n,
-  monoWidth,
-  monoWidthLS,
-  MONO_ADVANCE,
-  attrs,
-  tag,
-  g,
-  text,
-  svgDoc,
-  roundedRect,
-  smoothPath,
-  tracePath,
+  num,
+  seconds,
+  el,
+  rect,
+  circle,
+  ellipse,
+  path,
+  polygon,
+  group,
+  MONO,
+  SANS,
+  textWidth,
+  label,
+  roundRect,
+  card,
+  EASE_OUT,
+  EASE_IN_OUT,
+  animate,
+  animateTransform,
+  fadeIn,
+  rise,
+  spin,
+  loop,
+  loopTransform,
+  increasing,
+  randomizer,
+  svgDocument,
 };

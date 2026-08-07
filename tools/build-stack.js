@@ -1,359 +1,284 @@
-// The stack board. Replaces the wall of shields.io badges with a single
-// composed image: a bus spine, one lane per domain, and every tool as a chip.
-// Content is exactly what the profile previously declared — reorganised, not
-// invented.
-//
-// Lanes wrap: type is sized for legibility at GitHub's README width first, and
-// the layout reflows to fit rather than the other way round.
-
-const fs = require('fs');
-const path = require('path');
-const { themes, FONT_MONO, FONT_SANS } = require('./lib/theme');
-const { svgDoc, tag, g, text, n, monoWidth, monoWidthLS, roundedRect } = require('./lib/svg');
-const { backdrop, cornerMarks } = require('./lib/scene');
-
-const W = 1200;
+const {
+  el,
+  circle,
+  path,
+  group,
+  label,
+  card,
+  roundRect,
+  textWidth,
+  SANS,
+  fadeIn,
+  rise,
+  loop,
+  svgDocument,
+} = require('./lib/svg');
+const { backdrop, corners } = require('./lib/scene');
+const { writeThemedAssets } = require('./lib/write');
 
 const LANES = [
-  { label: 'LANGUAGES', key: 'cyan', items: ['C#', 'TypeScript', 'JavaScript', 'Lua', 'PowerShell', 'HTML5', 'CSS3', 'Markdown'] },
-  { label: 'FRONTEND', key: 'violet', items: ['Tailwind CSS', 'SASS', 'Bootstrap', 'jQuery', 'Webpack', 'Gulp', 'WordPress'] },
-  { label: 'BACKEND', key: 'magenta', items: ['.NET', 'Node.js', 'GraphQL', 'JWT', 'Swagger', 'NPM'] },
-  { label: 'DATA', key: 'green', items: ['SQL Server', 'MongoDB', 'MySQL', 'Redis'] },
-  { label: 'CLOUD', key: 'cyan', items: ['AWS', 'Azure', 'Google Cloud', 'Vercel'] },
-  { label: 'DEVOPS', key: 'violet', items: ['Docker', 'Kubernetes', 'Terraform', 'GitHub Actions', 'GitLab CI'] },
-  { label: 'VERSION CTRL', key: 'magenta', items: ['Git', 'GitHub', 'GitLab', 'Bitbucket', 'Subversion'] },
-  { label: 'QUALITY', key: 'green', items: ['ESLint', 'Prettier', 'SonarQube', 'Selenium', 'Postman', 'Jira'] },
+  { label: 'LANGUAGES', accent: 'cyan', items: ['C#', 'TypeScript', 'JavaScript', 'Lua', 'PowerShell', 'HTML5', 'CSS3', 'Markdown'] },
+  { label: 'FRONTEND', accent: 'violet', items: ['Tailwind CSS', 'SASS', 'Bootstrap', 'jQuery', 'Webpack', 'Gulp', 'WordPress'] },
+  { label: 'BACKEND', accent: 'magenta', items: ['.NET', 'Node.js', 'GraphQL', 'JWT', 'Swagger', 'NPM'] },
+  { label: 'DATA', accent: 'green', items: ['SQL Server', 'MongoDB', 'MySQL', 'Redis'] },
+  { label: 'CLOUD', accent: 'cyan', items: ['AWS', 'Azure', 'Google Cloud', 'Vercel'] },
+  { label: 'DEVOPS', accent: 'violet', items: ['Docker', 'Kubernetes', 'Terraform', 'GitHub Actions', 'GitLab CI'] },
+  { label: 'VERSION CTRL', accent: 'magenta', items: ['Git', 'GitHub', 'GitLab', 'Bitbucket', 'Subversion'] },
+  { label: 'QUALITY', accent: 'green', items: ['ESLint', 'Prettier', 'SonarQube', 'Selenium', 'Postman', 'Jira'] },
 ];
 
+const WIDTH = 1200;
 const PAD = 46;
-const TOP = 132; // top of the first lane block
-const ROW_H = 44; // one wrapped row of chips
+const TOP = 132;
+const ROW = 44;
 const LANE_GAP = 10;
-const SPINE_X = 250;
-const LANE_X = 278;
-const RIGHT = W - PAD;
-const METER_W = 88;
-const METER_X = RIGHT - 34 - METER_W;
+const SPINE = 250;
+const LANE_START = 278;
+const RIGHT = WIDTH - PAD;
+const METER_WIDTH = 88;
+const METER_X = RIGHT - 34 - METER_WIDTH;
 const RAIL_END = METER_X - 20;
-const AVAIL = RAIL_END - LANE_X;
+const AVAILABLE = RAIL_END - LANE_START;
 
-const CHIP_H = 32;
-const CHIP_FS = 14.5;
-const CHIP_PAD = 16;
-const GAP = 9;
-const LABEL_FS = 13;
+const CHIP_HEIGHT = 32;
+const CHIP_SIZE = 14.5;
+const CHIP_GAP = 9;
 
-const chipWidth = (label) => monoWidth(label, CHIP_FS) + CHIP_PAD * 2;
+const chipWidth = (text) => textWidth(text, CHIP_SIZE) + 32;
+const rowWidth = (row) => row.reduce((total, item, i) => total + chipWidth(item) + (i ? CHIP_GAP : 0), 0);
 
-const rowWidth = (row) =>
-  row.reduce((s, item, i) => s + chipWidth(item) + (i ? GAP : 0), 0);
-
-/**
- * Greedy wrap, then a balancing pass — a greedy fit leaves orphans (7 chips on
- * one row and 1 on the next), which reads as a mistake rather than a layout.
- */
-function wrapLane(items) {
+function wrap(items) {
   const rows = [[]];
-  let used = 0;
   for (const item of items) {
-    const w = chipWidth(item);
-    const need = rows[rows.length - 1].length ? used + GAP + w : w;
-    if (need > AVAIL && rows[rows.length - 1].length) {
-      rows.push([item]);
-      used = w;
-    } else {
-      rows[rows.length - 1].push(item);
-      used = need;
-    }
+    const current = rows[rows.length - 1];
+    if (current.length && rowWidth([...current, item]) > AVAILABLE) rows.push([item]);
+    else current.push(item);
   }
-
   for (let i = rows.length - 2; i >= 0; i--) {
     while (rows[i].length > rows[i + 1].length + 1) {
       const moved = rows[i][rows[i].length - 1];
-      if (rowWidth([moved, ...rows[i + 1]]) > AVAIL) break;
+      if (rowWidth([moved, ...rows[i + 1]]) > AVAILABLE) break;
       rows[i + 1].unshift(rows[i].pop());
     }
   }
   return rows;
 }
 
-const LAYOUT = LANES.map((lane) => ({ ...lane, rows: wrapLane(lane.items) }));
-const BLOCK_H = LAYOUT.reduce((s, l) => s + l.rows.length * ROW_H + LANE_GAP, 0) - LANE_GAP;
-const H = TOP + BLOCK_H + 76;
+const LAYOUT = LANES.map((lane) => ({ ...lane, rows: wrap(lane.items) }));
+const TOTAL_ITEMS = LANES.reduce((sum, lane) => sum + lane.items.length, 0);
+const DEEPEST = Math.max(...LANES.map((lane) => lane.items.length));
+const HEIGHT =
+  TOP + LAYOUT.reduce((sum, lane) => sum + lane.rows.length * ROW + LANE_GAP, 0) - LANE_GAP + 76;
 
-function chip(t, label, x, cy, accent, delay) {
-  const w = chipWidth(label);
-  const y = cy - CHIP_H / 2;
-  return g(
+function chip(theme, text, x, middle, accent, delay) {
+  const width = chipWidth(text);
+  return group(
     { opacity: 0 },
-    tag('path', {
-      d: roundedRect(x, y, w, CHIP_H, 8),
-      fill: t.surfaceAlt,
-      'fill-opacity': t.name === 'dark' ? 0.82 : 0.95,
+    card({
+      x,
+      y: middle - CHIP_HEIGHT / 2,
+      w: width,
+      h: CHIP_HEIGHT,
+      r: 8,
+      fill: theme.surfaceAlt,
+      fillOpacity: theme.chipFill,
+      stroke: accent,
+      strokeOpacity: theme.chipStroke,
     }) +
-      tag('path', {
-        d: roundedRect(x + 0.5, y + 0.5, w - 1, CHIP_H - 1, 7.5),
-        stroke: accent,
-        'stroke-opacity': t.name === 'dark' ? 0.42 : 0.5,
-        'stroke-width': 1,
-        fill: 'none',
+      label(text, {
+        x: x + width / 2,
+        y: middle + 5,
+        size: CHIP_SIZE,
+        anchor: 'middle',
+        fill: theme.text,
       }) +
-      text(label, {
-        x: n(x + w / 2),
-        y: n(cy + 5),
-        fill: t.text,
-        'font-family': FONT_MONO,
-        'font-size': CHIP_FS,
-        'text-anchor': 'middle',
-      }) +
-      tag('animate', {
-        attributeName: 'opacity',
-        from: 0,
-        to: 1,
-        dur: '0.5s',
-        begin: `${n(delay)}s`,
-        fill: 'freeze',
-      }) +
-      tag('animateTransform', {
-        attributeName: 'transform',
-        type: 'translate',
-        from: '0 7',
-        to: '0 0',
-        dur: '0.6s',
-        begin: `${n(delay)}s`,
-        fill: 'freeze',
-        calcMode: 'spline',
-        keyTimes: '0;1',
-        keySplines: '.16 1 .3 1',
-      })
+      fadeIn({ begin: delay }) +
+      rise({ begin: delay })
   );
 }
 
-function render(t) {
-  const bd = backdrop(t, {
-    width: W,
-    height: H,
-    radius: 22,
-    seed: 31,
-    gridStep: 32,
-    blobs: [
-      { c: t.cyan, x: 0.1, y: 0.15, r: 0.42, dur: 31 },
-      { c: t.violet, x: 0.9, y: 0.5, r: 0.46, dur: 39 },
-      { c: t.magenta, x: 0.45, y: 0.95, r: 0.36, dur: 27 },
-    ],
-  });
-
-  const total = LANES.reduce((s, l) => s + l.items.length, 0);
-  const maxItems = Math.max(...LANES.map((l) => l.items.length));
-
-  let defs = bd.defs;
-  let lanes = '';
-  let index = 0;
-  let y = TOP;
-  let firstCy = null;
-  let lastCy = null;
-
-  LAYOUT.forEach((lane, li) => {
-    const accent = t[lane.key];
-    const headCy = y + ROW_H / 2;
-    if (firstCy === null) firstCy = headCy;
-    lastCy = headCy;
-
-    // Junction on the spine, plus the stub feeding this lane.
-    lanes += tag('path', {
-      d: `M${SPINE_X},${n(headCy)} H${LANE_X - 24}`,
-      stroke: accent,
-      'stroke-opacity': 0.5,
-      'stroke-width': 1.2,
-    });
-    lanes += tag('circle', {
-      cx: SPINE_X,
-      cy: n(headCy),
-      r: 3.8,
-      fill: t.bg,
-      stroke: accent,
-      'stroke-width': 1.5,
-    });
-    lanes += text(lane.label, {
-      x: SPINE_X - 20,
-      y: n(headCy + 4.6),
-      fill: accent,
-      'font-family': FONT_MONO,
-      'font-size': LABEL_FS,
-      'font-weight': 600,
-      'letter-spacing': '0.16em',
-      'text-anchor': 'end',
-    });
-
-    // Depth meter, aligned to the lane head.
-    const frac = lane.items.length / maxItems;
-    lanes += tag('path', {
-      d: roundedRect(METER_X, headCy - 3.5, METER_W, 7, 3.5),
-      fill: t.line,
-      'fill-opacity': t.name === 'dark' ? 0.7 : 1,
-    });
-    lanes += tag(
-      'path',
+function meter(theme, lane, accent, middle, index) {
+  const filled = Math.max(7, METER_WIDTH * (lane.items.length / DEEPEST));
+  return (
+    path({
+      d: roundRect(METER_X, middle - 3.5, METER_WIDTH, 7, 3.5),
+      fill: theme.line,
+      'fill-opacity': theme.name === 'dark' ? 0.7 : 1,
+    }) +
+    path(
       {
-        d: roundedRect(METER_X, headCy - 3.5, Math.max(7, METER_W * frac), 7, 3.5),
+        d: roundRect(METER_X, middle - 3.5, filled, 7, 3.5),
         fill: accent,
         'fill-opacity': 0.85,
         opacity: 0,
       },
-      tag('animate', {
-        attributeName: 'opacity',
-        from: 0,
-        to: 1,
-        dur: '0.6s',
-        begin: `${n(1.1 + li * 0.09)}s`,
-        fill: 'freeze',
-      })
-    );
-    lanes += text(String(lane.items.length).padStart(2, '0'), {
+      fadeIn({ begin: 1.1 + index * 0.09, dur: 0.6 })
+    ) +
+    label(String(lane.items.length).padStart(2, '0'), {
       x: RIGHT,
-      y: n(headCy + 4.6),
-      fill: t.textFaint,
-      'font-family': FONT_MONO,
-      'font-size': 13,
-      'letter-spacing': '0.1em',
-      'text-anchor': 'end',
+      y: middle + 4.6,
+      size: 13,
+      tracking: 0.1,
+      anchor: 'end',
+      fill: theme.textFaint,
+    })
+  );
+}
+
+function rail(theme, accent, middle, delay) {
+  return (
+    path({
+      d: `M${LANE_START - 24},${middle} H${RAIL_END}`,
+      stroke: theme.lineSoft,
+      'stroke-width': 1,
+      'stroke-dasharray': '1 5',
+    }) +
+    circle(
+      { cx: LANE_START, cy: middle, r: 2.8, fill: accent, opacity: 0 },
+      loop('cx', [LANE_START, RAIL_END], { dur: 7, begin: delay }) +
+        loop('opacity', [0, 0.9, 0.9, 0], { dur: 7, begin: delay, keyTimes: [0, 0.08, 0.85, 1] })
+    )
+  );
+}
+
+function lanes(theme) {
+  let y = TOP;
+  let chipIndex = 0;
+  const parts = [];
+  const heads = [];
+
+  LAYOUT.forEach((lane, laneIndex) => {
+    const accent = theme[lane.accent];
+    const head = y + ROW / 2;
+    heads.push(head);
+
+    parts.push(
+      path({
+        d: `M${SPINE},${head} H${LANE_START - 24}`,
+        stroke: accent,
+        'stroke-opacity': 0.5,
+        'stroke-width': 1.2,
+      }),
+      circle({ cx: SPINE, cy: head, r: 3.8, fill: theme.bg, stroke: accent, 'stroke-width': 1.5 }),
+      label(lane.label, {
+        x: SPINE - 20,
+        y: head + 4.6,
+        size: 13,
+        weight: 600,
+        tracking: 0.16,
+        anchor: 'end',
+        fill: accent,
+      }),
+      meter(theme, lane, accent, head, laneIndex)
+    );
+
+    lane.rows.forEach((row, rowIndex) => {
+      const middle = y + rowIndex * ROW + ROW / 2;
+      parts.push(rail(theme, accent, middle, 1.4 + (laneIndex * 2 + rowIndex) * 0.55));
+
+      let x = LANE_START;
+      for (const item of row) {
+        parts.push(chip(theme, item, x, middle, accent, 0.45 + chipIndex * 0.028));
+        x += chipWidth(item) + CHIP_GAP;
+        chipIndex++;
+      }
     });
 
-    lane.rows.forEach((row, ri) => {
-      const cy = y + ri * ROW_H + ROW_H / 2;
-
-      lanes += tag('path', {
-        d: `M${LANE_X - 24},${n(cy)} H${RAIL_END}`,
-        stroke: t.lineSoft,
-        'stroke-width': 1,
-        'stroke-dasharray': '1 5',
-      });
-
-      // A pulse of light travelling down the rail.
-      lanes += tag(
-        'circle',
-        { cx: LANE_X, cy: n(cy), r: 2.8, fill: accent, opacity: 0 },
-        tag('animate', {
-          attributeName: 'cx',
-          values: `${LANE_X};${RAIL_END}`,
-          dur: '7s',
-          begin: `${n(1.4 + (li * 2 + ri) * 0.55)}s`,
-          repeatCount: 'indefinite',
-        }) +
-          tag('animate', {
-            attributeName: 'opacity',
-            values: '0;0.9;0.9;0',
-            keyTimes: '0;0.08;0.85;1',
-            dur: '7s',
-            begin: `${n(1.4 + (li * 2 + ri) * 0.55)}s`,
-            repeatCount: 'indefinite',
-          })
-      );
-
-      let x = LANE_X;
-      row.forEach((item) => {
-        lanes += chip(t, item, x, cy, accent, 0.45 + index * 0.028);
-        x += chipWidth(item) + GAP;
-        index++;
-      });
-    });
-
-    y += lane.rows.length * ROW_H + LANE_GAP;
+    y += lane.rows.length * ROW + LANE_GAP;
   });
 
+  const first = heads[0];
+  const last = heads[heads.length - 1];
   const spine =
-    tag('path', {
-      d: `M${SPINE_X},${n(firstCy)} V${n(lastCy)}`,
-      stroke: t.line,
-      'stroke-width': 1.2,
-    }) +
-    tag(
-      'circle',
-      { cx: SPINE_X, cy: n(firstCy), r: 2.8, fill: t.cyan },
-      tag('animate', {
-        attributeName: 'cy',
-        values: `${n(firstCy)};${n(lastCy)};${n(firstCy)}`,
-        dur: '9s',
-        repeatCount: 'indefinite',
-        calcMode: 'spline',
-        keyTimes: '0;0.5;1',
-        keySplines: '.45 0 .55 1;.45 0 .55 1',
-      })
+    path({ d: `M${SPINE},${first} V${last}`, stroke: theme.line, 'stroke-width': 1.2 }) +
+    circle(
+      { cx: SPINE, cy: first, r: 2.8, fill: theme.cyan },
+      loop('cy', [first, last, first], { dur: 9, keyTimes: [0, 0.5, 1], ease: '.45 0 .55 1' })
     );
 
-  defs += tag(
-    'linearGradient',
-    { id: 'sh', x1: '0', y1: '0', x2: '1', y2: '0' },
-    tag('stop', { offset: '0%', 'stop-color': t.cyan }) +
-      tag('stop', { offset: '55%', 'stop-color': t.violet }) +
-      tag('stop', { offset: '100%', 'stop-color': t.magenta })
-  );
+  return spine + parts.join('');
+}
 
-  const header =
-    text('THE STACK', {
+function header(theme) {
+  return (
+    label('THE STACK', {
       x: PAD,
       y: 68,
-      fill: 'url(#sh)',
-      'font-family': FONT_SANS,
-      'font-size': 32,
-      'font-weight': 700,
-      'letter-spacing': '0.01em',
+      size: 32,
+      font: SANS,
+      weight: 700,
+      tracking: 0.01,
+      fill: 'url(#stackTitle)',
     }) +
-    text(`${total} tools  ·  ${LANES.length} domains`, {
+    label(`${TOTAL_ITEMS} tools  ·  ${LANES.length} domains`, {
       x: PAD,
       y: 93,
-      fill: t.textFaint,
-      'font-family': FONT_MONO,
-      'font-size': 13,
-      'letter-spacing': '0.14em',
-    }) +
-    tag('path', { d: `M${PAD},${H - 52} H${RIGHT}`, stroke: t.lineSoft, 'stroke-width': 1 }) +
-    text('day to day, in production', {
+      size: 13,
+      tracking: 0.14,
+      fill: theme.textFaint,
+    })
+  );
+}
+
+function footer(theme) {
+  return (
+    path({ d: `M${PAD},${HEIGHT - 52} H${RIGHT}`, stroke: theme.lineSoft, 'stroke-width': 1 }) +
+    label('day to day, in production', {
       x: PAD,
-      y: n(H - 28),
-      fill: t.textFaint,
-      'font-family': FONT_MONO,
-      'font-size': 12.5,
-      'letter-spacing': '0.12em',
+      y: HEIGHT - 28,
+      size: 12.5,
+      tracking: 0.12,
+      fill: theme.textFaint,
     }) +
-    text('◆ ◆ ◆', {
+    label('◆ ◆ ◆', {
       x: RIGHT,
-      y: n(H - 28),
-      fill: t.textFaint,
-      'font-family': FONT_MONO,
-      'font-size': 11,
-      'letter-spacing': '0.3em',
-      'text-anchor': 'end',
+      y: HEIGHT - 28,
+      size: 11,
+      tracking: 0.3,
+      anchor: 'end',
       opacity: 0.6,
-    });
+      fill: theme.textFaint,
+    })
+  );
+}
 
-  const children =
-    bd.body +
-    cornerMarks(t, { width: W, height: H, inset: 16, len: 13 }) +
-    header +
-    spine +
-    lanes +
-    bd.frame;
+function render(theme) {
+  const plate = backdrop(theme, {
+    width: WIDTH,
+    height: HEIGHT,
+    seed: 31,
+    gridStep: 32,
+    blobs: [
+      { color: theme.cyan, x: 0.1, y: 0.15, size: 0.42, dur: 31 },
+      { color: theme.violet, x: 0.9, y: 0.5, size: 0.46, dur: 39 },
+      { color: theme.magenta, x: 0.45, y: 0.95, size: 0.36, dur: 27 },
+    ],
+  });
 
-  return svgDoc({
-    width: W,
-    height: H,
-    defs,
-    children,
+  const title = el(
+    'linearGradient',
+    { id: 'stackTitle', x1: '0', y1: '0', x2: '1', y2: '0' },
+    el('stop', { offset: '0%', 'stop-color': theme.cyan }) +
+      el('stop', { offset: '55%', 'stop-color': theme.violet }) +
+      el('stop', { offset: '100%', 'stop-color': theme.magenta })
+  );
+
+  return svgDocument({
+    width: WIDTH,
+    height: HEIGHT,
     title: 'The stack',
-    desc: LANES.map((l) => `${l.label}: ${l.items.join(', ')}`).join('. '),
+    desc: LANES.map((lane) => `${lane.label}: ${lane.items.join(', ')}`).join('. '),
+    defs: plate.defs + title,
+    body:
+      plate.body +
+      corners(theme, { width: WIDTH, height: HEIGHT }) +
+      header(theme) +
+      lanes(theme) +
+      footer(theme) +
+      plate.frame,
   });
 }
 
-function main() {
-  const out = path.join(__dirname, '..', 'assets');
-  fs.mkdirSync(out, { recursive: true });
-  for (const key of ['dark', 'light']) {
-    const file = path.join(out, `stack-${key}.svg`);
-    fs.writeFileSync(file, render(themes[key]));
-    console.log(`wrote ${path.relative(process.cwd(), file)}`);
-  }
-}
+if (require.main === module) writeThemedAssets('stack', render);
 
-if (require.main === module) main();
-module.exports = { render, LANES, LAYOUT, W, H };
+module.exports = { render, LANES, LAYOUT, WIDTH, HEIGHT };

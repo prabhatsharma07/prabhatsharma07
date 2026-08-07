@@ -58,14 +58,15 @@ itself, or quietly go offline.
 
 ```
 tools/
+├─ lib/svg.js          elements, text metrics, animation, deterministic PRNG
 ├─ lib/theme.js        design tokens, one set per theme
-├─ lib/svg.js          dependency-free SVG writer + deterministic PRNG
 ├─ lib/scene.js        aurora field, blueprint grid, starfield, typewriter
 ├─ lib/github.js       GraphQL → contribution model (streaks, totals)
+├─ lib/write.js        writes a themed pair into assets/
 ├─ build-hero.js       the banner
 ├─ build-stack.js      the stack board
 ├─ build-activity.js   the contribution dashboard
-└─ build-all.js        renders every asset into assets/
+└─ build-all.js        renders every asset
 ```
 
 Each asset is rendered twice — once per theme — and swapped by `<picture>` on

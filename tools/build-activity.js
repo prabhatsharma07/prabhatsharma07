@@ -1,82 +1,74 @@
-// Live contribution dashboard. Rendered from real GitHub data when a token is
-// available; otherwise it renders an honest empty state — never invented
-// numbers.
-
-const fs = require('fs');
-const path = require('path');
-const { themes, FONT_MONO, FONT_SANS } = require('./lib/theme');
-const { svgDoc, tag, g, text, n, monoWidth, monoWidthLS, roundedRect } = require('./lib/svg');
-const { backdrop, cornerMarks, panel } = require('./lib/scene');
+const {
+  el,
+  rect,
+  path,
+  group,
+  label,
+  card,
+  textWidth,
+  SANS,
+  fadeIn,
+  loop,
+  svgDocument,
+} = require('./lib/svg');
+const { backdrop, corners, pill, pillWidth } = require('./lib/scene');
 const { fetchProfile, LOGIN } = require('./lib/github');
+const { writeThemedAssets } = require('./lib/write');
 
-const W = 1200;
-const H = 502;
+const WIDTH = 1200;
+const HEIGHT = 502;
 const PAD = 44;
-const RIGHT = W - PAD;
+const RIGHT = WIDTH - PAD;
+const GRID_X = PAD + 38;
+const GRID_Y = 262;
+const LEGEND_Y = 430;
+const SPARSE_LIMIT = 25;
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
-const fmt = (v) => (v == null ? '—' : Number(v).toLocaleString('en-US'));
+const count = (value) => (value == null ? '—' : Number(value).toLocaleString('en-US'));
 
-/** A 53-week grid of real dates with no counts, for the pre-sync state. */
-function placeholderWeeks(now) {
-  const weeks = [];
+function blankYear(now) {
   const end = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
-  // Walk back to the most recent Sunday, then back 52 more weeks.
   const start = new Date(end);
   start.setUTCDate(start.getUTCDate() - end.getUTCDay() - 52 * 7);
-  for (let w = 0; w < 53; w++) {
+
+  const weeks = [];
+  for (let week = 0; week < 53; week++) {
     const days = [];
-    for (let d = 0; d < 7; d++) {
-      const cur = new Date(start);
-      cur.setUTCDate(start.getUTCDate() + w * 7 + d);
-      if (cur > end) break;
-      days.push({ date: cur.toISOString().slice(0, 10), count: 0, weekday: d, level: 0 });
+    for (let day = 0; day < 7; day++) {
+      const date = new Date(start);
+      date.setUTCDate(start.getUTCDate() + week * 7 + day);
+      if (date > end) break;
+      days.push({ date: date.toISOString().slice(0, 10), count: 0, weekday: day, level: 0 });
     }
     if (days.length) weeks.push(days);
   }
   return weeks;
 }
 
-function statTile(t, { x, y, w, h, label, value, suffix, accent, delay }) {
-  const barW = w - 36;
+function tile(theme, { x, y, w, h, name, value, caption, accent, delay }) {
   return (
-    panel(t, { x, y, w, h, radius: 12 }) +
-    text(label, {
-      x: x + 18,
-      y: y + 27,
-      fill: t.textFaint,
-      'font-family': FONT_MONO,
-      'font-size': 12.5,
-      'letter-spacing': '0.2em',
-    }) +
-    text(value, {
+    card({ x, y, w, h, fill: theme.surface, fillOpacity: theme.surfaceFill, stroke: theme.line }) +
+    label(name, { x: x + 18, y: y + 27, size: 12.5, tracking: 0.2, fill: theme.textFaint }) +
+    label(value, {
       x: x + 18,
       y: y + 68,
+      size: 40,
+      font: SANS,
+      weight: 700,
+      tracking: -0.01,
       fill: accent,
-      'font-family': FONT_SANS,
-      'font-size': 40,
-      'font-weight': 700,
-      'letter-spacing': '-0.01em',
     }) +
-    text(suffix, {
-      x: x + 18,
-      y: y + 84,
-      fill: t.textFaint,
-      'font-family': FONT_MONO,
-      'font-size': 12,
-      'letter-spacing': '0.14em',
-    }) +
-    // Underline that draws itself in, clear of the caption's descenders.
-    tag(
-      'rect',
+    label(caption, { x: x + 18, y: y + 84, size: 12, tracking: 0.14, fill: theme.textFaint }) +
+    rect(
       { x: x + 18, y: y + h - 8, width: 0, height: 2, rx: 1, fill: accent, opacity: 0.75 },
-      tag('animate', {
+      el('animate', {
         attributeName: 'width',
         from: 0,
-        to: barW,
+        to: w - 36,
         dur: '1.1s',
-        begin: `${n(delay)}s`,
+        begin: `${delay}s`,
         fill: 'freeze',
         calcMode: 'spline',
         keyTimes: '0;1',
@@ -86,437 +78,297 @@ function statTile(t, { x, y, w, h, label, value, suffix, accent, delay }) {
   );
 }
 
-function heatmap(t, weeks, { x0, y0, width, height }) {
-  const cols = weeks.length;
-  const pitch = Math.min(width / cols, height / 7);
-  const cell = Math.max(6, pitch - 3.6);
-  const r = Math.max(2, cell * 0.22);
+function tiles(theme, data) {
+  const gap = 16;
+  const width = (WIDTH - PAD * 2 - gap * 3) / 4;
+  return [
+    { name: 'CONTRIBUTIONS', value: data && count(data.total), caption: 'LAST 12 MONTHS', accent: theme.cyan },
+    { name: 'CURRENT STREAK', value: data && count(data.currentStreak), caption: 'CONSECUTIVE DAYS', accent: theme.violet },
+    { name: 'LONGEST STREAK', value: data && count(data.longestStreak), caption: 'CONSECUTIVE DAYS', accent: theme.magenta },
+    {
+      name: 'ACTIVE DAYS',
+      value: data && count(data.activeDays),
+      caption: `OF ${data ? data.trackedDays : 365} TRACKED`,
+      accent: theme.green,
+    },
+  ]
+    .map((spec, index) =>
+      tile(theme, {
+        ...spec,
+        value: spec.value || '—',
+        x: PAD + index * (width + gap),
+        y: 106,
+        w: width,
+        h: 100,
+        delay: 0.5 + index * 0.12,
+      })
+    )
+    .join('');
+}
 
-  let cells = '';
-  let monthLabels = '';
+function heatmap(theme, weeks) {
+  const pitch = Math.min((RIGHT - GRID_X) / weeks.length, 150 / 7);
+  const size = Math.max(6, pitch - 3.6);
+  const radius = Math.max(2, size * 0.22);
+  const gridWidth = weeks.length * pitch;
+
+  const cells = [];
+  const months = [];
   let lastMonth = -1;
 
-  weeks.forEach((week, ci) => {
-    const cx = x0 + ci * pitch;
-
-    // Month tick when a new month starts inside this column.
+  weeks.forEach((week, column) => {
+    const x = GRID_X + column * pitch;
     const first = week[0];
-    if (first) {
-      const m = Number(first.date.slice(5, 7)) - 1;
-      if (m !== lastMonth && ci < cols - 1) {
-        // Only label once the month actually owns this column.
-        const day = Number(first.date.slice(8, 10));
-        if (day <= 7) {
-          monthLabels += text(MONTHS[m], {
-            x: n(cx),
-            y: n(y0 - 12),
-            fill: t.textFaint,
-            'font-family': FONT_MONO,
-            'font-size': 12,
-            'letter-spacing': '0.1em',
-          });
-          lastMonth = m;
-        }
+
+    if (first && column < weeks.length - 1) {
+      const month = Number(first.date.slice(5, 7)) - 1;
+      if (month !== lastMonth && Number(first.date.slice(8, 10)) <= 7) {
+        months.push(label(MONTHS[month], { x, y: GRID_Y - 12, size: 12, tracking: 0.1, fill: theme.textFaint }));
+        lastMonth = month;
       }
     }
 
-    week.forEach((day) => {
-      const cy = y0 + day.weekday * pitch;
-      const fill = t.heat[Math.max(0, Math.min(4, day.level))];
-      const delay = 0.45 + ci * 0.013 + day.weekday * 0.02;
-      const target = day.level === 0 ? (t.name === 'dark' ? 0.85 : 0.9) : 1;
-      cells += tag(
-        'rect',
-        {
-          x: n(cx),
-          y: n(cy),
-          width: n(cell),
-          height: n(cell),
-          rx: n(r),
-          fill,
-          opacity: 0,
-        },
-        tag('animate', {
-          attributeName: 'opacity',
-          from: 0,
-          to: target,
-          dur: '0.5s',
-          begin: `${n(delay)}s`,
-          fill: 'freeze',
-        })
+    for (const day of week) {
+      cells.push(
+        rect(
+          {
+            x,
+            y: GRID_Y + day.weekday * pitch,
+            width: size,
+            height: size,
+            rx: radius,
+            fill: theme.heat[Math.min(4, Math.max(0, day.level))],
+            opacity: 0,
+          },
+          fadeIn({
+            begin: 0.45 + column * 0.013 + day.weekday * 0.02,
+            to: day.level === 0 ? (theme.name === 'dark' ? 0.85 : 0.9) : 1,
+          })
+        )
       );
-    });
+    }
   });
 
-  // Weekday gutter.
-  let weekdays = '';
-  [
+  const weekdays = [
     [1, 'Mon'],
     [3, 'Wed'],
     [5, 'Fri'],
-  ].forEach(([row, label]) => {
-    weekdays += text(label, {
-      x: n(x0 - 12),
-      y: n(y0 + row * pitch + cell * 0.75),
-      fill: t.textFaint,
-      'font-family': FONT_MONO,
-      'font-size': 12,
-      'text-anchor': 'end',
-    });
-  });
+  ].map(([row, name]) =>
+    label(name, {
+      x: GRID_X - 12,
+      y: GRID_Y + row * pitch + size * 0.75,
+      size: 12,
+      anchor: 'end',
+      fill: theme.textFaint,
+    })
+  );
 
-  // A slow highlight sweeping left to right across the grid.
-  const gridW = cols * pitch;
-  const sweep = tag(
-    'g',
-    { 'clip-path': 'url(#hmclip)' },
-    tag(
-      'rect',
-      { x: n(x0 - 120), y: n(y0 - 4), width: 120, height: n(7 * pitch + 8), fill: 'url(#sweepg)' },
-      tag('animate', {
-        attributeName: 'x',
-        values: `${n(x0 - 140)};${n(x0 + gridW + 40)}`,
-        dur: '9s',
-        begin: '2.6s',
-        repeatCount: 'indefinite',
-      })
+  const sweep = group(
+    { 'clip-path': 'url(#gridClip)' },
+    rect(
+      { x: GRID_X - 120, y: GRID_Y - 4, width: 120, height: 7 * pitch + 8, fill: 'url(#gridSweep)' },
+      loop('x', [GRID_X - 140, GRID_X + gridWidth + 40], { dur: 9, begin: 2.6 })
     )
   );
 
-  const clip = tag(
+  const clip = el(
     'clipPath',
-    { id: 'hmclip' },
-    tag('rect', { x: n(x0 - 4), y: n(y0 - 4), width: n(gridW + 8), height: n(7 * pitch + 8) })
+    { id: 'gridClip' },
+    rect({ x: GRID_X - 4, y: GRID_Y - 4, width: gridWidth + 8, height: 7 * pitch + 8 })
   );
 
-  return { cells, monthLabels, weekdays, sweep, clip, pitch, cell, gridW };
+  return { body: months.join('') + weekdays.join('') + cells.join('') + sweep, defs: clip };
 }
 
-function render(t, data, now) {
-  const isLive = !!data;
-  const weeks = isLive ? data.weeks : placeholderWeeks(now);
+function legend(theme) {
+  const box = 11;
+  const gap = 4;
+  const swatches = theme.heat.length * (box + gap) - gap;
+  const width = textWidth('Less', 12) + 10 + swatches + 10 + textWidth('More', 12);
 
-  const bd = backdrop(t, {
-    width: W,
-    height: H,
-    radius: 22,
+  let x = RIGHT - width;
+  const parts = [label('Less', { x, y: LEGEND_Y + 9, size: 12, fill: theme.textFaint })];
+
+  x += textWidth('Less', 12) + 10;
+  for (const shade of theme.heat) {
+    parts.push(rect({ x, y: LEGEND_Y, width: box, height: box, rx: 2.6, fill: shade }));
+    x += box + gap;
+  }
+
+  parts.push(label('More', { x: x + 6, y: LEGEND_Y + 9, size: 12, fill: theme.textFaint }));
+  return parts.join('');
+}
+
+function lifetimeStrip(theme, lifetime) {
+  const parts = [
+    ['commits', lifetime.commits],
+    ['pull requests', lifetime.pullRequests],
+    ['reviews', lifetime.reviews],
+    ['issues', lifetime.issues],
+  ].filter(([, value]) => value > 0);
+
+  const pieces = [
+    label('SINCE 2020', {
+      x: PAD,
+      y: HEIGHT - 26,
+      size: 12,
+      weight: 600,
+      tracking: 0.2,
+      fill: theme.textDim,
+    }),
+  ];
+
+  let x = PAD + textWidth('SINCE 2020', 12, 0.2) + 22;
+  parts.forEach(([name, value], index) => {
+    const text = `${count(value)} ${name}`;
+    pieces.push(label(text, { x, y: HEIGHT - 26, size: 12, tracking: 0.1, fill: theme.textFaint }));
+    x += textWidth(text, 12, 0.1);
+    if (index < parts.length - 1) {
+      pieces.push(
+        label('·', { x: x + 8, y: HEIGHT - 26, size: 12, opacity: 0.5, fill: theme.textFaint })
+      );
+      x += 24;
+    }
+  });
+
+  return pieces.join('');
+}
+
+function render(theme, data, now) {
+  const weeks = data ? data.weeks : blankYear(now);
+  const publicOnly = data && !data.privateShared;
+  const understated = publicOnly && data.total < SPARSE_LIMIT;
+  const synced = (data ? data.generatedAt : now.toISOString()).slice(0, 10);
+
+  const plate = backdrop(theme, {
+    width: WIDTH,
+    height: HEIGHT,
     seed: 53,
     gridStep: 32,
     blobs: [
-      { c: t.cyan, x: 0.12, y: 0.8, r: 0.44, dur: 29 },
-      { c: t.violet, x: 0.55, y: 0.12, r: 0.42, dur: 37 },
-      { c: t.green, x: 0.92, y: 0.7, r: 0.36, dur: 25 },
+      { color: theme.cyan, x: 0.12, y: 0.8, size: 0.44, dur: 29 },
+      { color: theme.violet, x: 0.55, y: 0.12, size: 0.42, dur: 37 },
+      { color: theme.green, x: 0.92, y: 0.7, size: 0.36, dur: 25 },
     ],
   });
 
-  const hm = heatmap(t, weeks, { x0: PAD + 38, y0: 262, width: RIGHT - (PAD + 38), height: 150 });
+  const grid = heatmap(theme, weeks);
 
-  const titleGrad = tag(
-    'linearGradient',
-    { id: 'ah', x1: '0', y1: '0', x2: '1', y2: '0' },
-    tag('stop', { offset: '0%', 'stop-color': t.cyan }) +
-      tag('stop', { offset: '60%', 'stop-color': t.violet }) +
-      tag('stop', { offset: '100%', 'stop-color': t.magenta })
-  );
-
-  const sweepGrad = tag(
-    'linearGradient',
-    { id: 'sweepg', x1: '0', y1: '0', x2: '1', y2: '0' },
-    tag('stop', { offset: '0%', 'stop-color': t.cyan, 'stop-opacity': 0 }) +
-      tag('stop', { offset: '50%', 'stop-color': t.cyan, 'stop-opacity': t.name === 'dark' ? 0.16 : 0.1 }) +
-      tag('stop', { offset: '100%', 'stop-color': t.cyan, 'stop-opacity': 0 })
-  );
-
-  const synced = (isLive ? data.generatedAt : now.toISOString()).slice(0, 10);
-
-  // A public-only calendar on an account that works mostly in private repos
-  // reads as "this person does nothing". Detect it and say what is actually
-  // going on rather than presenting a near-empty year as the whole picture.
-  const publicOnly = isLive && !data.privateShared;
-  const looksUnderstated = publicOnly && data.total < 25;
-
-  const scope = !isLive
+  const scope = !data
     ? 'waiting for first sync'
     : data.privateShared
       ? 'public + private contributions'
       : 'public contributions only';
-  const subtitle = `last 12 months  ·  ${scope}${isLive ? `  ·  synced ${synced}` : ''}`;
 
-  // Status pill, right-aligned.
-  const pillLabel = !isLive
-    ? 'AWAITING SYNC'
-    : looksUnderstated
-      ? 'PRIVATE WORK HIDDEN'
-      : `SYNCED ${synced}`;
-  const pillW = 30 + monoWidthLS(pillLabel, 12, 0.14) + 14;
-  const pillX = RIGHT - pillW;
-  const pillAccent = isLive && !looksUnderstated ? t.green : t.amber;
-  const pill =
-    tag('path', {
-      d: roundedRect(pillX, 40, pillW, 28, 14),
-      fill: t.surface,
-      'fill-opacity': t.name === 'dark' ? 0.5 : 0.85,
-    }) +
-    tag('path', {
-      d: roundedRect(pillX + 0.5, 40.5, pillW - 1, 27, 13.5),
-      stroke: t.line,
-      'stroke-width': 1,
-      fill: 'none',
-    }) +
-    tag(
-      'circle',
-      { cx: pillX + 17, cy: 54, r: 3.4, fill: pillAccent },
-      tag('animate', {
-        attributeName: 'opacity',
-        values: '1;0.25;1',
-        dur: '2.2s',
-        repeatCount: 'indefinite',
-      })
+  const status = !data ? 'AWAITING SYNC' : understated ? 'PRIVATE WORK HIDDEN' : `SYNCED ${synced}`;
+  const statusWidth = pillWidth(status, 12, 0.14);
+
+  const note = !data
+    ? 'run the "profile art" workflow to populate this panel with live data'
+    : understated
+      ? 'this counts public repositories only — turn on Settings › Public profile › Include private contributions'
+      : 'no contributions recorded in this window';
+
+  const lifetime = data && data.lifetime;
+  const showLifetime =
+    lifetime &&
+    !understated &&
+    lifetime.commits + lifetime.pullRequests + lifetime.reviews + lifetime.issues > 0;
+
+  const defs =
+    plate.defs +
+    grid.defs +
+    el(
+      'linearGradient',
+      { id: 'activityTitle', x1: '0', y1: '0', x2: '1', y2: '0' },
+      el('stop', { offset: '0%', 'stop-color': theme.cyan }) +
+        el('stop', { offset: '60%', 'stop-color': theme.violet }) +
+        el('stop', { offset: '100%', 'stop-color': theme.magenta })
     ) +
-    text(pillLabel, {
-      x: pillX + 30,
-      y: 58,
-      fill: t.textDim,
-      'font-family': FONT_MONO,
-      'font-size': 12,
-      'letter-spacing': '0.14em',
-    });
-
-  const header =
-    text('CONTRIBUTION ACTIVITY', {
-      x: PAD,
-      y: 60,
-      fill: 'url(#ah)',
-      'font-family': FONT_SANS,
-      'font-size': 32,
-      'font-weight': 700,
-      'letter-spacing': '0.01em',
-    }) +
-    text(subtitle, {
-      x: PAD,
-      y: 82,
-      fill: t.textFaint,
-      'font-family': FONT_MONO,
-      'font-size': 13,
-      'letter-spacing': '0.12em',
-    }) +
-    pill;
-
-  // Stat tiles.
-  const tileGap = 16;
-  const tileW = (W - PAD * 2 - tileGap * 3) / 4;
-  const tiles = [
-    {
-      label: 'CONTRIBUTIONS',
-      value: isLive ? fmt(data.total) : '—',
-      suffix: 'LAST 12 MONTHS',
-      accent: t.cyan,
-    },
-    {
-      label: 'CURRENT STREAK',
-      value: isLive ? fmt(data.currentStreak) : '—',
-      suffix: 'CONSECUTIVE DAYS',
-      accent: t.violet,
-    },
-    {
-      label: 'LONGEST STREAK',
-      value: isLive ? fmt(data.longestStreak) : '—',
-      suffix: 'CONSECUTIVE DAYS',
-      accent: t.magenta,
-    },
-    {
-      label: 'ACTIVE DAYS',
-      value: isLive ? fmt(data.activeDays) : '—',
-      suffix: isLive ? `OF ${data.trackedDays} TRACKED` : 'OF 365 TRACKED',
-      accent: t.green,
-    },
-  ]
-    .map((tile, i) =>
-      statTile(t, {
-        ...tile,
-        x: PAD + i * (tileW + tileGap),
-        y: 106,
-        w: tileW,
-        h: 100,
-        delay: 0.5 + i * 0.12,
-      })
-    )
-    .join('');
-
-  // Heat legend under the grid, right-aligned.
-  const legendY = 430;
-  let legend = '';
-  {
-    const box = 11;
-    const gap = 4;
-    const label = 'Less';
-    const moreW = monoWidth('More', 12);
-    const swatchesW = t.heat.length * (box + gap) - gap;
-    const totalW = monoWidth(label, 12) + 10 + swatchesW + 10 + moreW;
-    let lx = RIGHT - totalW;
-    legend += text(label, {
-      x: n(lx),
-      y: legendY + 9,
-      fill: t.textFaint,
-      'font-family': FONT_MONO,
-      'font-size': 12,
-    });
-    lx += monoWidth(label, 12) + 10;
-    t.heat.forEach((c) => {
-      legend += tag('rect', { x: n(lx), y: legendY, width: box, height: box, rx: 2.6, fill: c });
-      lx += box + gap;
-    });
-    lx += 6;
-    legend += text('More', {
-      x: n(lx),
-      y: legendY + 9,
-      fill: t.textFaint,
-      'font-family': FONT_MONO,
-      'font-size': 12,
-    });
-  }
-
-  // Best day, left-aligned opposite the legend.
-  if (isLive && data.best && data.best.count > 0) {
-    legend =
-      text(`peak  ${fmt(data.best.count)} contributions on ${data.best.date}`, {
-        x: PAD,
-        y: legendY + 9,
-        fill: t.textFaint,
-        'font-family': FONT_MONO,
-        'font-size': 12,
-        'letter-spacing': '0.1em',
-      }) + legend;
-  }
-
-  // Lifetime strip — only shown when there is something real to show.
-  let footer = tag('path', {
-    d: `M${PAD},${H - 50} H${RIGHT}`,
-    stroke: t.lineSoft,
-    'stroke-width': 1,
-  });
-
-  const lt = isLive ? data.lifetime : null;
-  const hasLifetime =
-    lt && !looksUnderstated && lt.commits + lt.pullRequests + lt.reviews + lt.issues > 0;
-  if (hasLifetime) {
-    const parts = [
-      ['commits', lt.commits],
-      ['pull requests', lt.pullRequests],
-      ['reviews', lt.reviews],
-      ['issues', lt.issues],
-    ].filter(([, v]) => v > 0);
-    let fx = PAD;
-    footer += text('SINCE 2020', {
-      x: fx,
-      y: H - 26,
-      fill: t.textDim,
-      'font-family': FONT_MONO,
-      'font-size': 12,
-      'font-weight': 600,
-      'letter-spacing': '0.2em',
-    });
-    fx += monoWidthLS('SINCE 2020', 12, 0.2) + 22;
-    parts.forEach(([label, v], i) => {
-      const str = `${fmt(v)} ${label}`;
-      footer += text(str, {
-        x: n(fx),
-        y: H - 26,
-        fill: t.textFaint,
-        'font-family': FONT_MONO,
-        'font-size': 12,
-        'letter-spacing': '0.1em',
-      });
-      fx += monoWidthLS(str, 12, 0.1);
-      if (i < parts.length - 1) {
-        footer += text('·', {
-          x: n(fx + 8),
-          y: H - 26,
-          fill: t.textFaint,
-          'font-family': FONT_MONO,
-          'font-size': 12,
-          opacity: 0.5,
-        });
-        fx += 24;
-      }
-    });
-  } else {
-    footer += text(
-      !isLive
-        ? 'run the "profile art" workflow to populate this panel with live data'
-        : looksUnderstated
-          ? 'this counts public repositories only — turn on Settings › Public profile › Include private contributions'
-          : 'no contributions recorded in this window',
-      {
-        x: PAD,
-        y: H - 26,
-        fill: t.textFaint,
-        'font-family': FONT_MONO,
-        'font-size': 12,
-        'letter-spacing': '0.08em',
-      }
+    el(
+      'linearGradient',
+      { id: 'gridSweep', x1: '0', y1: '0', x2: '1', y2: '0' },
+      el('stop', { offset: '0%', 'stop-color': theme.cyan, 'stop-opacity': 0 }) +
+        el('stop', {
+          offset: '50%',
+          'stop-color': theme.cyan,
+          'stop-opacity': theme.name === 'dark' ? 0.16 : 0.1,
+        }) +
+        el('stop', { offset: '100%', 'stop-color': theme.cyan, 'stop-opacity': 0 })
     );
-  }
 
-  footer += text(`@${LOGIN}`, {
-    x: RIGHT,
-    y: H - 26,
-    fill: t.textFaint,
-    'font-family': FONT_MONO,
-    'font-size': 12,
-    'letter-spacing': '0.12em',
-    'text-anchor': 'end',
-  });
-
-  const defs = bd.defs + titleGrad + sweepGrad + hm.clip;
-
-  const children =
-    bd.body +
-    cornerMarks(t, { width: W, height: H, inset: 16, len: 13 }) +
-    header +
-    tiles +
-    hm.monthLabels +
-    hm.weekdays +
-    hm.cells +
-    hm.sweep +
-    legend +
-    footer +
-    bd.frame;
-
-  return svgDoc({
-    width: W,
-    height: H,
-    defs,
-    children,
+  return svgDocument({
+    width: WIDTH,
+    height: HEIGHT,
     title: 'Contribution activity',
-    desc: isLive
+    desc: data
       ? `${data.total} contributions in the last 12 months. Current streak ${data.currentStreak} days, longest ${data.longestStreak} days, ${data.activeDays} active days.`
       : 'Contribution activity panel, awaiting its first data sync.',
+    defs,
+    body:
+      plate.body +
+      corners(theme, { width: WIDTH, height: HEIGHT }) +
+      label('CONTRIBUTION ACTIVITY', {
+        x: PAD,
+        y: 60,
+        size: 32,
+        font: SANS,
+        weight: 700,
+        tracking: 0.01,
+        fill: 'url(#activityTitle)',
+      }) +
+      label(`last 12 months  ·  ${scope}${data ? `  ·  synced ${synced}` : ''}`, {
+        x: PAD,
+        y: 82,
+        size: 13,
+        tracking: 0.12,
+        fill: theme.textFaint,
+      }) +
+      pill(theme, {
+        x: RIGHT - statusWidth,
+        y: 40,
+        w: statusWidth,
+        h: 28,
+        text: status,
+        size: 12,
+        tracking: 0.14,
+        dot: data && !understated ? theme.green : theme.amber,
+        blinkDur: 2.2,
+      }) +
+      tiles(theme, data) +
+      grid.body +
+      (data && data.best && data.best.count > 0
+        ? label(`peak  ${count(data.best.count)} contributions on ${data.best.date}`, {
+            x: PAD,
+            y: LEGEND_Y + 9,
+            size: 12,
+            tracking: 0.1,
+            fill: theme.textFaint,
+          })
+        : '') +
+      legend(theme) +
+      path({ d: `M${PAD},${HEIGHT - 50} H${RIGHT}`, stroke: theme.lineSoft, 'stroke-width': 1 }) +
+      (showLifetime
+        ? lifetimeStrip(theme, lifetime)
+        : label(note, { x: PAD, y: HEIGHT - 26, size: 12, tracking: 0.08, fill: theme.textFaint })) +
+      label(`@${LOGIN}`, {
+        x: RIGHT,
+        y: HEIGHT - 26,
+        size: 12,
+        tracking: 0.12,
+        anchor: 'end',
+        fill: theme.textFaint,
+      }) +
+      plate.frame,
   });
 }
 
 async function main() {
   const now = new Date();
   const data = await fetchProfile();
-  const out = path.join(__dirname, '..', 'assets');
-  fs.mkdirSync(out, { recursive: true });
-  for (const key of ['dark', 'light']) {
-    const file = path.join(out, `activity-${key}.svg`);
-    fs.writeFileSync(file, render(themes[key], data, now));
-    console.log(`wrote ${path.relative(process.cwd(), file)}${data ? '' : ' (empty state)'}`);
-  }
-  if (data) {
-    console.log(
-      `[github] ${data.total} contributions · streak ${data.currentStreak} · longest ${data.longestStreak}`
-    );
-  }
+  writeThemedAssets('activity', render, data, now);
 }
 
-if (require.main === module) {
-  main().catch((e) => {
-    console.error(e);
-    process.exit(1);
-  });
-}
+if (require.main === module) main().catch((error) => { console.error(error); process.exit(1); });
 
-module.exports = { render, placeholderWeeks, W, H };
+module.exports = { render, blankYear, WIDTH, HEIGHT };

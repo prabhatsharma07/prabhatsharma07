@@ -1,21 +1,8 @@
-// Pulls the contribution calendar and lifetime totals from GitHub's GraphQL
-// API. Everything here is best-effort: if there is no token, or the request
-// fails, callers get null and render the empty state rather than fabricating
-// numbers.
-//
-// Token notes:
-//   GITHUB_TOKEN (the Actions default) sees PUBLIC contributions only.
-//   A user PAT also reports private contributions, but only if
-//   "Include private contributions on my profile" is enabled under
-//   Settings -> Public profile -> Contributions & Activity. Without that
-//   setting the calendar is public-only no matter which token is used, which
-//   is what `privateShared` below reports back to the renderer.
-
 const LOGIN = process.env.PROFILE_LOGIN || 'prabhatsharma07';
-
+const ENDPOINT = 'https://api.github.com/graphql';
 const LEVELS = ['NONE', 'FIRST_QUARTILE', 'SECOND_QUARTILE', 'THIRD_QUARTILE', 'FOURTH_QUARTILE'];
 
-const CALENDAR_QUERY = `query($login: String!) {
+const CALENDAR = `query($login: String!) {
   user(login: $login) {
     name
     login
@@ -27,7 +14,6 @@ const CALENDAR_QUERY = `query($login: String!) {
       contributionCalendar {
         totalContributions
         weeks {
-          firstDay
           contributionDays { date weekday contributionCount contributionLevel }
         }
       }
@@ -35,17 +21,12 @@ const CALENDAR_QUERY = `query($login: String!) {
   }
 }`;
 
-/**
- * contributionsCollection accepts at most a one-year window, so lifetime
- * figures have to be assembled a year at a time and summed. The final window
- * is clamped to now — a `to` in the future is not something to rely on.
- */
-function lifetimeQuery(years, nowIso) {
-  const fields = years
-    .map((y) => {
-      const to = `${y}-12-31T23:59:59Z`;
-      return `y${y}: contributionsCollection(from: "${y}-01-01T00:00:00Z", to: "${
-        to > nowIso ? nowIso : to
+const lifetimeQuery = (years, until) => {
+  const windows = years
+    .map((year) => {
+      const end = `${year}-12-31T23:59:59Z`;
+      return `y${year}: contributionsCollection(from: "${year}-01-01T00:00:00Z", to: "${
+        end > until ? until : end
       }") {
         totalCommitContributions
         totalPullRequestContributions
@@ -55,133 +36,126 @@ function lifetimeQuery(years, nowIso) {
       }`;
     })
     .join('\n');
-  return `query($login: String!) { user(login: $login) { ${fields} } }`;
-}
+  return `query($login: String!) { user(login: $login) { ${windows} } }`;
+};
 
-async function graphql(query, variables, token) {
-  const res = await fetch('https://api.github.com/graphql', {
+async function query(document, token) {
+  const response = await fetch(ENDPOINT, {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${token}`,
       'Content-Type': 'application/json',
       'User-Agent': 'profile-readme-art',
     },
-    body: JSON.stringify({ query, variables }),
+    body: JSON.stringify({ query: document, variables: { login: LOGIN } }),
   });
-  if (!res.ok) {
-    throw new Error(`GraphQL HTTP ${res.status}: ${(await res.text()).slice(0, 300)}`);
+
+  if (!response.ok) {
+    throw new Error(`HTTP ${response.status}: ${(await response.text()).slice(0, 300)}`);
   }
-  const json = await res.json();
-  if (json.errors) {
-    throw new Error(`GraphQL errors: ${JSON.stringify(json.errors).slice(0, 300)}`);
+
+  const payload = await response.json();
+  if (payload.errors) {
+    throw new Error(JSON.stringify(payload.errors).slice(0, 300));
   }
-  return json.data;
+  return payload.data;
 }
 
-const toDay = (d) => ({
-  date: d.date,
-  count: d.contributionCount,
-  weekday: d.weekday,
-  level: Math.max(0, LEVELS.indexOf(d.contributionLevel)),
+const toDay = (day) => ({
+  date: day.date,
+  count: day.contributionCount,
+  weekday: day.weekday,
+  level: Math.max(0, LEVELS.indexOf(day.contributionLevel)),
 });
 
-/**
- * Streaks are computed from the tail of the calendar. A zero on today alone
- * does not break the current streak — the day is still in progress.
- */
 function streaks(days) {
   let longest = 0;
   let run = 0;
-  for (const d of days) {
-    run = d.count > 0 ? run + 1 : 0;
-    if (run > longest) longest = run;
+  for (const day of days) {
+    run = day.count > 0 ? run + 1 : 0;
+    longest = Math.max(longest, run);
   }
 
-  let i = days.length - 1;
-  if (i >= 0 && days[i].count === 0) i -= 1; // today may not have landed yet
+  let index = days.length - 1;
+  if (index >= 0 && days[index].count === 0) index -= 1;
+
   let current = 0;
-  for (; i >= 0; i--) {
-    if (days[i].count === 0) break;
+  while (index >= 0 && days[index].count > 0) {
     current++;
+    index--;
   }
+
   return { current, longest };
+}
+
+function sumLifetime(user, years) {
+  const totals = { commits: 0, pullRequests: 0, reviews: 0, issues: 0, restricted: 0 };
+  for (const year of years) {
+    const window = user[`y${year}`];
+    if (!window) continue;
+    totals.commits += window.totalCommitContributions || 0;
+    totals.pullRequests += window.totalPullRequestContributions || 0;
+    totals.reviews += window.totalPullRequestReviewContributions || 0;
+    totals.issues += window.totalIssueContributions || 0;
+    totals.restricted += window.restrictedContributionsCount || 0;
+  }
+  return totals;
 }
 
 async function fetchProfile() {
   const token = process.env.GH_PAT || process.env.GITHUB_TOKEN;
   if (!token) {
-    console.warn('[github] no GH_PAT or GITHUB_TOKEN in env — rendering empty state');
+    console.warn('[github] no GH_PAT or GITHUB_TOKEN — rendering empty state');
     return null;
   }
 
   const now = new Date();
-  let data;
+  let user;
   try {
-    data = await graphql(CALENDAR_QUERY, { login: LOGIN }, token);
-  } catch (err) {
-    console.warn(`[github] calendar fetch failed — rendering empty state: ${err.message}`);
+    user = (await query(CALENDAR, token)).user;
+  } catch (error) {
+    console.warn(`[github] calendar unavailable — rendering empty state: ${error.message}`);
     return null;
   }
-
-  const user = data && data.user;
   if (!user) {
-    console.warn('[github] no user in response — rendering empty state');
+    console.warn('[github] no such user — rendering empty state');
     return null;
   }
 
-  const cc = user.contributionsCollection;
-  const calendar = cc.contributionCalendar;
-  const weeks = calendar.weeks.map((w) => w.contributionDays.map(toDay));
+  const collection = user.contributionsCollection;
+  const weeks = collection.contributionCalendar.weeks.map((week) =>
+    week.contributionDays.map(toDay)
+  );
   const days = weeks.flat();
   const { current, longest } = streaks(days);
+  const years = [...(collection.contributionYears || [])].sort();
 
-  // Years the account has contributed in, newest first per the schema.
-  const years = (cc.contributionYears || []).slice().sort();
-  const lifetime = { commits: 0, pullRequests: 0, reviews: 0, issues: 0, restricted: 0 };
+  let lifetime = { commits: 0, pullRequests: 0, reviews: 0, issues: 0, restricted: 0 };
   if (years.length) {
     try {
-      const lt = await graphql(
-        lifetimeQuery(years, now.toISOString().replace(/\.\d{3}Z$/, 'Z')),
-        { login: LOGIN },
-        token
-      );
-      for (const y of years) {
-        const c = lt.user[`y${y}`];
-        if (!c) continue;
-        lifetime.commits += c.totalCommitContributions || 0;
-        lifetime.pullRequests += c.totalPullRequestContributions || 0;
-        lifetime.reviews += c.totalPullRequestReviewContributions || 0;
-        lifetime.issues += c.totalIssueContributions || 0;
-        lifetime.restricted += c.restrictedContributionsCount || 0;
-      }
-    } catch (err) {
-      // The calendar is the important part; lifetime totals are a bonus.
-      console.warn(`[github] lifetime totals unavailable: ${err.message}`);
+      const until = now.toISOString().replace(/\.\d{3}Z$/, 'Z');
+      const totals = await query(lifetimeQuery(years, until), token);
+      lifetime = sumLifetime(totals.user, years);
+    } catch (error) {
+      console.warn(`[github] lifetime totals unavailable: ${error.message}`);
     }
   }
-
-  const best = days.reduce((a, b) => (b.count > a.count ? b : a), { count: 0, date: null });
-
-  // Whether the account shares private contribution counts at all. When it
-  // does not, the calendar below is public-only and the panel says so instead
-  // of quietly presenting a near-empty year as the whole picture.
-  const privateShared =
-    !!cc.hasAnyRestrictedContributions || (cc.restrictedContributionsCount || 0) > 0;
 
   return {
     login: user.login,
     name: user.name,
     createdAt: user.createdAt,
     generatedAt: now.toISOString(),
-    firstYear: years[0] || new Date(user.createdAt).getUTCFullYear(),
-    total: calendar.totalContributions,
-    activeDays: days.filter((d) => d.count > 0).length,
+    total: collection.contributionCalendar.totalContributions,
+    activeDays: days.filter((day) => day.count > 0).length,
     trackedDays: days.length,
     currentStreak: current,
     longestStreak: longest,
-    best,
+    best: days.reduce((best, day) => (day.count > best.count ? day : best), { count: 0, date: null }),
+    privateShared:
+      Boolean(collection.hasAnyRestrictedContributions) ||
+      (collection.restrictedContributionsCount || 0) > 0,
     lifetime,
-    privateShared,
     weeks,
   };
 }
